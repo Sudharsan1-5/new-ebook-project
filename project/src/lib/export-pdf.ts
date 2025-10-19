@@ -6,24 +6,48 @@ export class PDFExporter {
     ebook: EBook,
     chapters: Chapter[],
     template: Template,
-    includeWatermark: boolean = false
+    includeCover: boolean = false,
+    coverImageUrl?: string
   ): Promise<Blob> {
+    console.log('Starting PDF export...');
+    console.log('eBook:', ebook.title);
+    console.log('Chapters:', chapters.length);
+    console.log('Include cover:', includeCover);
+    console.log('Cover URL:', coverImageUrl);
+    
+    // Validate chapters have content
+    if (!chapters || chapters.length === 0) {
+      throw new Error('No chapters to export');
+    }
+    
+    const hasContent = chapters.some(ch => ch.content && ch.content.trim().length > 0);
+    if (!hasContent) {
+      throw new Error('Chapters have no content');
+    }
+    
+    console.log('Chapters validated, generating HTML...');
+    
     // Create a container div for the content
     const container = document.createElement('div');
+    container.className = 'pdf-export-container';
     container.style.position = 'fixed';
     container.style.left = '0';
     container.style.top = '0';
     container.style.width = '210mm';
-    container.style.height = 'auto';
+    container.style.minHeight = '297mm';
     container.style.background = 'white';
-    container.style.padding = '20px';
+    container.style.padding = '0';
+    container.style.margin = '0';
     container.style.zIndex = '-1000';
-    container.style.opacity = '0';
+    container.style.opacity = '0.01'; // Slightly visible for rendering
     container.style.pointerEvents = 'none';
+    container.style.overflow = 'visible';
     
-    // Generate the content directly without full HTML wrapper
+    // Generate the content
     const styles = this.generateInlineStyles(template);
-    const content = this.generateContent(ebook, chapters);
+    const content = await this.generateContent(ebook, chapters, includeCover, coverImageUrl);
+    
+    console.log('Content generated, length:', content.length);
     
     // Create a style element
     const styleElement = document.createElement('style');
@@ -34,6 +58,8 @@ export class PDFExporter {
     container.insertBefore(styleElement, container.firstChild);
     
     document.body.appendChild(container);
+    
+    console.log('Container added to DOM');
 
     try {
       const opt = {
@@ -63,16 +89,41 @@ export class PDFExporter {
       } as any;
 
       // Wait for fonts to load
+      console.log('Waiting for fonts...');
       await document.fonts.ready;
       
-      // Small delay to ensure rendering is complete
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for images to load if cover is included
+      if (includeCover && coverImageUrl) {
+        console.log('Waiting for cover image to load...');
+        const images = container.getElementsByTagName('img');
+        await Promise.all(
+          Array.from(images).map(img => {
+            if (img.complete) return Promise.resolve();
+            return new Promise<void>((resolve) => {
+              img.onload = () => resolve();
+              img.onerror = () => {
+                console.warn('Image failed to load:', img.src);
+                resolve(); // Continue anyway
+              };
+              setTimeout(() => resolve(), 5000); // Timeout after 5s
+            });
+          })
+        );
+      }
+      
+      // Longer delay to ensure rendering is complete
+      console.log('Waiting for rendering...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('Generating PDF...');
 
       // Generate PDF and return as blob
       const pdfBlob = await html2pdf()
         .set(opt)
         .from(container)
         .output('blob');
+      
+      console.log('PDF generated, size:', pdfBlob.size, 'bytes');
 
       return pdfBlob;
     } finally {
@@ -88,12 +139,32 @@ export class PDFExporter {
         box-sizing: border-box;
       }
 
-      body, .pdf-container {
+      body, .pdf-container, .pdf-export-container {
         font-family: ${template.styles.fontFamily}, Georgia, serif;
         font-size: ${template.styles.fontSize.body}pt;
         line-height: ${template.styles.lineHeight.body};
         color: ${template.styles.colors.text};
         background: white;
+      }
+      
+      .cover-image-page {
+        width: 100%;
+        height: 297mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        page-break-after: always;
+        background: white;
+        padding: 0;
+        margin: 0;
+      }
+      
+      .cover-image {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
       }
 
       .cover-page {
@@ -223,12 +294,38 @@ export class PDFExporter {
     `;
   }
 
-  private generateContent(ebook: EBook, chapters: Chapter[]): string {
-    const coverPage = this.generateCoverPage(ebook);
-    const tocPage = this.generateTableOfContents(chapters);
+  private async generateContent(
+    ebook: EBook, 
+    chapters: Chapter[], 
+    includeCover: boolean,
+    coverImageUrl?: string
+  ): Promise<string> {
+    let content = '';
+    
+    // Add cover image page if requested
+    if (includeCover && coverImageUrl) {
+      content += this.generateCoverImagePage(coverImageUrl, ebook.title);
+    }
+    
+    // Add title page
+    content += this.generateCoverPage(ebook);
+    
+    // Add table of contents
+    content += this.generateTableOfContents(chapters);
+    
+    // Add chapters
     const chapterPages = chapters.map(chapter => this.generateChapter(chapter)).join('\n');
+    content += chapterPages;
 
-    return `${coverPage}\n${tocPage}\n${chapterPages}`;
+    return content;
+  }
+  
+  private generateCoverImagePage(imageUrl: string, title: string): string {
+    return `
+<div class="cover-image-page">
+  <img src="${imageUrl}" alt="${this.escapeHtml(title)} Cover" class="cover-image" crossorigin="anonymous" />
+</div>
+    `.trim();
   }
 
   private generateCoverPage(ebook: EBook): string {
@@ -275,14 +372,21 @@ export class PDFExporter {
 
   private formatContent(content: string): string {
     if (!content || content.trim() === '') {
-      return '<p>No content available.</p>';
+      console.warn('Empty content detected');
+      return '<p class="no-content">No content available.</p>';
     }
 
+    console.log('Formatting content, length:', content.length);
+    
+    // Split by double newlines for paragraphs
     const paragraphs = content.split('\n\n').filter(p => p.trim());
+    
+    console.log('Paragraphs found:', paragraphs.length);
 
-    return paragraphs.map(paragraph => {
+    const formatted = paragraphs.map((paragraph) => {
       const trimmed = paragraph.trim();
 
+      // Headers
       if (trimmed.startsWith('## ')) {
         return `<h2>${this.escapeHtml(trimmed.substring(3))}</h2>`;
       }
@@ -290,9 +394,15 @@ export class PDFExporter {
       if (trimmed.startsWith('### ')) {
         return `<h3>${this.escapeHtml(trimmed.substring(4))}</h3>`;
       }
+      
+      if (trimmed.startsWith('# ')) {
+        return `<h2>${this.escapeHtml(trimmed.substring(2))}</h2>`;
+      }
 
+      // Unordered lists
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
         const items = trimmed.split('\n')
+          .filter(line => line.trim())
           .map(line => {
             const item = line.replace(/^[*\-]\s+/, '');
             return `<li>${this.escapeHtml(item)}</li>`;
@@ -301,8 +411,10 @@ export class PDFExporter {
         return `<ul>${items}</ul>`;
       }
 
+      // Ordered lists
       if (/^\d+\.\s/.test(trimmed)) {
         const items = trimmed.split('\n')
+          .filter(line => line.trim())
           .map(line => {
             const item = line.replace(/^\d+\.\s+/, '');
             return `<li>${this.escapeHtml(item)}</li>`;
@@ -310,9 +422,20 @@ export class PDFExporter {
           .join('\n');
         return `<ol>${items}</ol>`;
       }
+      
+      // Bold text **text**
+      let processed = trimmed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      // Italic text *text*
+      processed = processed.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      // Code `code`
+      processed = processed.replace(/`(.+?)`/g, '<code>$1</code>');
 
-      return `<p>${this.escapeHtml(trimmed)}</p>`;
+      // Regular paragraph
+      return `<p>${this.escapeHtml(processed)}</p>`;
     }).join('\n');
+    
+    console.log('Content formatted successfully');
+    return formatted;
   }
 
   private escapeHtml(text: string): string {

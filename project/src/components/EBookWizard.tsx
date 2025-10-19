@@ -492,6 +492,20 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
                 </div>
                 <div className="flex justify-center gap-3">
                   <Button
+                    variant="primary"
+                    onClick={() => {
+                      const a = document.createElement('a');
+                      a.href = generatedCoverUrl;
+                      a.download = `${selectedTitle.replace(/[^a-z0-9]/gi, '_')}_cover.png`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download Cover Image
+                  </Button>
+                  <Button
                     variant="outline"
                     onClick={() => {
                       setGeneratedCoverUrl(null);
@@ -500,6 +514,11 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
                   >
                     Generate New Cover
                   </Button>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-sm text-green-800 text-center">
+                    ✓ Cover generated successfully! You can download it or generate a new one.
+                  </p>
                 </div>
               </div>
             ) : (
@@ -516,7 +535,7 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
                   </div>
 
                   <TextArea
-                    label="Cover Description (Optional)"
+                    label="Cover Description"
                     value={coverPrompt}
                     onChange={(e) => setCoverPrompt(e.target.value)}
                     placeholder="e.g., Modern design with geometric shapes, vibrant sunset colors, minimalist tech theme..."
@@ -589,9 +608,9 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
                   )}
                 </Button>
 
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-sm text-yellow-800">
-                    <strong>Note:</strong> You can skip this step and generate a cover later from the dashboard.
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Required:</strong> Generate a professional cover for your eBook. This will be used in PDF exports and marketing materials.
                   </p>
                 </div>
 
@@ -649,6 +668,9 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
     }
     if (currentStep === 'titles') {
       return selectedTitle;
+    }
+    if (currentStep === 'cover') {
+      return generatedCoverUrl !== null; // Cover is now required
     }
     return true;
   };

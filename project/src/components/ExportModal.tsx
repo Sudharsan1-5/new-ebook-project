@@ -22,15 +22,30 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 }) => {
   const [exporting, setExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<'pdf' | 'epub' | null>(null);
+  const [includeCover, setIncludeCover] = useState(true);
 
   const handleExportPDF = async () => {
     setExporting(true);
     setExportFormat('pdf');
 
     try {
+      console.log('=== PDF Export Started ===');
+      console.log('eBook:', ebook);
+      console.log('Chapters:', chapters);
+      console.log('Include cover:', includeCover);
+      console.log('Cover URL:', ebook.cover_url);
+      
       const template = getTemplateById('minimal-professional') || templates[0];
       const exporter = new PDFExporter();
-      const blob = await exporter.exportEBook(ebook, chapters, template, false);
+      const blob = await exporter.exportEBook(
+        ebook, 
+        chapters, 
+        template, 
+        includeCover,
+        ebook.cover_url || undefined
+      );
+      
+      console.log('PDF blob created, size:', blob.size);
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -215,7 +230,25 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
+          {/* Include Cover Option */}
+          {ebook.cover_url && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeCover}
+                  onChange={(e) => setIncludeCover(e.target.checked)}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div>
+                  <span className="font-medium text-gray-900">Include AI-Generated Cover Image</span>
+                  <p className="text-sm text-gray-600">Add your cover image as the first page of the PDF</p>
+                </div>
+              </label>
+            </div>
+          )}
+          
           <button
             onClick={handleExportPDF}
             disabled={exporting}

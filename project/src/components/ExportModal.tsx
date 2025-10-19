@@ -83,8 +83,124 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
   };
 
-  const handleExportMockup = () => {
-    alert('Mockup generation requires a cover image. This feature will be available once you generate a cover for this eBook.');
+  const handleExportMockup = async () => {
+    if (!ebook.cover_url) {
+      alert('Mockup generation requires a cover image. Please generate a cover first.');
+      return;
+    }
+
+    setExporting(true);
+    setExportFormat('epub'); // Reuse the state
+
+    try {
+      // Create a canvas for the 3D mockup
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas not supported');
+
+      // Set canvas size for high-quality mockup
+      canvas.width = 2400;
+      canvas.height = 1600;
+
+      // Draw background gradient
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, '#f8fafc');
+      gradient.addColorStop(1, '#e2e8f0');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Add subtle shadow for depth
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = 40;
+      ctx.shadowOffsetX = 20;
+      ctx.shadowOffsetY = 20;
+
+      // Draw book mockup (3D perspective)
+      const bookWidth = 600;
+      const bookHeight = 900;
+      const bookX = (canvas.width - bookWidth) / 2;
+      const bookY = (canvas.height - bookHeight) / 2;
+
+      // Book spine (left side)
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.moveTo(bookX - 40, bookY);
+      ctx.lineTo(bookX, bookY + 20);
+      ctx.lineTo(bookX, bookY + bookHeight - 20);
+      ctx.lineTo(bookX - 40, bookY + bookHeight);
+      ctx.closePath();
+      ctx.fill();
+
+      // Book cover (front)
+      ctx.shadowBlur = 30;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(bookX, bookY, bookWidth, bookHeight);
+
+      // Load and draw cover image if available
+      if (ebook.cover_url) {
+        try {
+          const img = document.createElement('img');
+          img.crossOrigin = 'anonymous';
+          
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = ebook.cover_url!;
+          });
+
+          // Draw the cover image
+          ctx.shadowBlur = 0;
+          ctx.drawImage(img, bookX + 20, bookY + 20, bookWidth - 40, bookHeight - 40);
+        } catch (err) {
+          console.error('Failed to load cover image:', err);
+          // Draw placeholder if image fails
+          ctx.fillStyle = '#3b82f6';
+          ctx.fillRect(bookX + 20, bookY + 20, bookWidth - 40, bookHeight - 40);
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 48px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(ebook.title, bookX + bookWidth / 2, bookY + bookHeight / 2);
+        }
+      }
+
+      // Add book title overlay at bottom
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(0, canvas.height - 150, canvas.width, 150);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 56px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(ebook.title, canvas.width / 2, canvas.height - 80);
+
+      // Convert canvas to blob and download
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          throw new Error('Failed to generate mockup');
+        }
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${ebook.title.replace(/[^a-z0-9]/gi, '_')}_mockup.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        setTimeout(() => {
+          setExporting(false);
+          setExportFormat(null);
+        }, 1000);
+      }, 'image/png', 0.95);
+    } catch (error) {
+      console.error('Mockup generation failed:', error);
+      alert('Failed to generate mockup. Please try again.');
+      setExporting(false);
+      setExportFormat(null);
+    }
   };
 
   return (

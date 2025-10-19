@@ -28,13 +28,38 @@ export const Dashboard: React.FC<{ onNavigateToAdmin?: () => void }> = ({ onNavi
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
 
       if (error) throw error;
+      
+      // If profile doesn't exist, create it
+      if (!data) {
+        console.log('Profile not found, creating new profile for user:', user.id);
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email,
+            role: 'user',
+            subscription_tier: 'free',
+            ebooks_limit: 3,
+            ebooks_created: 0
+          })
+          .select()
+          .single();
+        
+        if (createError) {
+          console.error('Error creating profile:', createError);
+          throw createError;
+        }
+        
+        data = newProfile;
+      }
+      
       setUserProfile(data);
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -80,7 +105,11 @@ export const Dashboard: React.FC<{ onNavigateToAdmin?: () => void }> = ({ onNavi
   };
 
   const handleCreateNew = () => {
-    if (!userProfile) return;
+    if (!userProfile) {
+      alert('Loading your profile... Please try again in a moment.');
+      loadUserProfile(); // Retry loading profile
+      return;
+    }
 
     if (userProfile.ebooks_created >= userProfile.ebooks_limit) {
       alert(`You've reached your limit of ${userProfile.ebooks_limit} eBooks. Please upgrade your subscription to create more.`);
@@ -105,7 +134,8 @@ export const Dashboard: React.FC<{ onNavigateToAdmin?: () => void }> = ({ onNavi
           status: projectData.status,
           word_count: projectData.word_count,
           chapter_count: projectData.chapter_count,
-          template_id: 'minimal-professional'
+          template_id: 'minimal-professional',
+          cover_url: projectData.cover_url || null
         })
         .select()
         .single();

@@ -7,6 +7,9 @@ import { EPUBExporter } from '../lib/export-epub';
 import { templates, getTemplateById } from '../lib/templates';
 import { EBook, Chapter } from '../types';
 
+// Updated exportFormat type to include 'mockup'
+type ExportFormat = 'pdf' | 'epub' | 'mockup' | null;
+
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -21,22 +24,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   chapters
 }) => {
   const [exporting, setExporting] = useState(false);
-  const [exportFormat, setExportFormat] = useState<'pdf' | 'epub' | null>(null);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>(null);
   const [includeCover, setIncludeCover] = useState(true);
 
   const handleExportPDF = async () => {
     setExporting(true);
     setExportFormat('pdf');
 
+    // 💡 Added check for chapters content to help debug blank PDFs
+    if (chapters.length === 0 || chapters.every(c => !c.content?.trim())) {
+        console.warn('PDF Export Warning: Chapters array is empty or all chapter content is blank. This will result in a blank PDF.');
+    }
+
     try {
-      console.log('=== PDF Export Started ===');
-      console.log('eBook:', ebook);
-      console.log('Chapters:', chapters);
-      console.log('Include cover:', includeCover);
-      console.log('Cover URL:', ebook.cover_url);
-      
+      // Console logs removed for cleaner final code, but kept in the prompt for debugging context
+
       const template = getTemplateById('minimal-professional') || templates[0];
       const exporter = new PDFExporter();
+      
       const blob = await exporter.exportEBook(
         ebook, 
         chapters, 
@@ -44,8 +49,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         includeCover,
         ebook.cover_url || undefined
       );
-      
-      console.log('PDF blob created, size:', blob.size);
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -105,7 +108,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
 
     setExporting(true);
-    setExportFormat('epub'); // Reuse the state
+    setExportFormat('mockup'); // 💡 Corrected state to 'mockup'
 
     try {
       // Create a canvas for the 3D mockup
@@ -151,11 +154,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(bookX, bookY, bookWidth, bookHeight);
 
-      // Load and draw cover image if available
+      // Load and draw cover image
+      let imageLoadFailed = false;
       if (ebook.cover_url) {
         try {
           const img = document.createElement('img');
-          img.crossOrigin = 'anonymous';
+          // ⚠️ IMPORTANT: Cross-Origin setting for CORS issue (Issue 1)
+          img.crossOrigin = 'anonymous'; 
           
           await new Promise((resolve, reject) => {
             img.onload = resolve;
@@ -168,7 +173,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           ctx.drawImage(img, bookX + 20, bookY + 20, bookWidth - 40, bookHeight - 40);
         } catch (err) {
           console.error('Failed to load cover image:', err);
-          // Draw placeholder if image fails
+          imageLoadFailed = true;
+          // Fallback placeholder if image fails
           ctx.fillStyle = '#3b82f6';
           ctx.fillRect(bookX + 20, bookY + 20, bookWidth - 40, bookHeight - 40);
           
@@ -176,7 +182,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           ctx.font = 'bold 48px Arial';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(ebook.title, bookX + bookWidth / 2, bookY + bookHeight / 2);
+          ctx.fillText('Cover Error', bookX + bookWidth / 2, bookY + bookHeight / 2);
         }
       }
 
@@ -189,30 +195,35 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       ctx.font = 'bold 56px Arial';
       ctx.textAlign = 'center';
       ctx.fillText(ebook.title, canvas.width / 2, canvas.height - 80);
+      
+      // 💡 Wrap canvas.toBlob in a Promise to use async/await and centralize error handling
+      await new Promise<void>((resolve, reject) => {
+          canvas.toBlob((blob) => {
+              if (!blob) {
+                  // This is where SecurityError (CORS tainting) results in a null blob
+                  reject(new Error(imageLoadFailed ? 'Mockup generation failed due to cover load error.' : 'Mockup generation failed. (Check CORS if cover is remote)'));
+                  return;
+              }
 
-      // Convert canvas to blob and download
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          throw new Error('Failed to generate mockup');
-        }
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${ebook.title.replace(/[^a-z0-9]/gi, '_')}_mockup.png`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              resolve();
+          }, 'image/png', 0.95);
+      });
 
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${ebook.title.replace(/[^a-z0-9]/gi, '_')}_mockup.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        setTimeout(() => {
-          setExporting(false);
-          setExportFormat(null);
-        }, 1000);
-      }, 'image/png', 0.95);
+      setTimeout(() => {
+        setExporting(false);
+        setExportFormat(null);
+      }, 1000);
     } catch (error) {
       console.error('Mockup generation failed:', error);
-      alert('Failed to generate mockup. Please try again.');
+      alert(`Failed to generate mockup. ${(error as Error).message}`);
       setExporting(false);
       setExportFormat(null);
     }
@@ -307,6 +318,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 <p className="text-sm text-gray-600">
                   High-resolution mockup image for product listings and marketing.
                 </p>
+                {exporting && exportFormat === 'mockup' && (
+                  <p className="text-sm text-blue-600 mt-2">Generating Mockup...</p>
+                )}
                 {!ebook.cover_url && (
                   <p className="text-sm text-gray-500 mt-2">Requires a cover image</p>
                 )}

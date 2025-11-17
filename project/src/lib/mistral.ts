@@ -1,6 +1,10 @@
 import { AIGenerationOptions } from '../types';
 import { supabase } from './supabase';
 
+/**
+ * AI Content Generation Service using Google Gemini AI
+ * This service generates book titles, chapter outlines, and chapter content
+ */
 export class MistralService {
   private async callEdgeFunction(operation: string, data: any): Promise<string> {
     try {

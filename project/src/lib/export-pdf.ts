@@ -140,13 +140,13 @@ export class PDFExporter {
       }
 
       body, .pdf-container, .pdf-export-container {
-        font-family: ${template.styles.fontFamily}, Georgia, serif;
+        font-family: ${template.styles.fontFamily}, 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
         font-size: ${template.styles.fontSize.body}pt;
         line-height: ${template.styles.lineHeight.body};
         color: ${template.styles.colors.text};
         background: white;
       }
-      
+
       .cover-image-page {
         width: 100%;
         height: 297mm;
@@ -158,13 +158,14 @@ export class PDFExporter {
         padding: 0;
         margin: 0;
       }
-      
+
       .cover-image {
         max-width: 100%;
         max-height: 100%;
         width: auto;
         height: auto;
         object-fit: contain;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
       }
 
       .cover-page {
@@ -175,64 +176,102 @@ export class PDFExporter {
         align-items: center;
         text-align: center;
         page-break-after: always;
-        padding: 60px 40px;
+        padding: 80px 60px;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        position: relative;
+      }
+
+      .cover-page::before {
+        content: '';
+        position: absolute;
+        top: 40px;
+        left: 40px;
+        right: 40px;
+        bottom: 40px;
+        border: 2px solid ${template.styles.colors.heading};
+        opacity: 0.2;
       }
 
       .cover-title {
-        font-size: 48pt;
-        font-weight: bold;
+        font-size: 52pt;
+        font-weight: 700;
         color: ${template.styles.colors.heading};
-        margin-bottom: 30px;
-        line-height: 1.2;
+        margin-bottom: 40px;
+        line-height: 1.15;
+        letter-spacing: -0.5px;
+        text-transform: uppercase;
+        position: relative;
+        z-index: 1;
       }
 
       .cover-subtitle {
-        font-size: 18pt;
+        font-size: 16pt;
         color: ${template.styles.colors.text};
-        opacity: 0.8;
+        opacity: 0.75;
+        font-weight: 400;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        position: relative;
+        z-index: 1;
       }
 
       .toc-page {
         page-break-after: always;
-        padding: 40px 0;
+        padding: 60px 0;
+        background: white;
       }
 
       .toc-title {
-        font-size: 36pt;
-        font-weight: bold;
+        font-size: 38pt;
+        font-weight: 700;
         color: ${template.styles.colors.heading};
-        margin-bottom: 40px;
+        margin-bottom: 50px;
+        text-align: center;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        border-bottom: 3px solid ${template.styles.colors.heading};
+        padding-bottom: 20px;
       }
 
       .toc-item {
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        margin-bottom: 16px;
-        font-size: 14pt;
-        line-height: 1.5;
+        margin-bottom: 18px;
+        font-size: 13pt;
+        line-height: 1.6;
+        padding: 8px 0;
+        transition: all 0.3s ease;
+      }
+
+      .toc-item:hover {
+        background: rgba(0,0,0,0.02);
+        padding-left: 8px;
       }
 
       .toc-chapter {
         flex: 1;
         padding-right: 12px;
+        font-weight: 500;
       }
 
       .toc-dots {
         flex-grow: 1;
-        border-bottom: 1px dotted #ccc;
+        border-bottom: 2px dotted #d0d0d0;
         height: 0.8em;
-        margin: 0 8px;
+        margin: 0 12px;
       }
 
       .toc-page-num {
-        font-weight: 500;
+        font-weight: 600;
         color: ${template.styles.colors.heading};
+        min-width: 30px;
+        text-align: right;
       }
 
       .chapter {
         page-break-before: always;
-        padding: 40px 0;
+        padding: 50px 0;
         min-height: 80vh;
       }
 
@@ -242,12 +281,14 @@ export class PDFExporter {
 
       .chapter-title {
         font-size: ${template.styles.fontSize.heading}pt;
-        font-weight: bold;
+        font-weight: 700;
         color: ${template.styles.colors.heading};
-        margin-bottom: 32px;
+        margin-bottom: 40px;
         line-height: ${template.styles.lineHeight.heading};
-        border-bottom: 2px solid ${template.styles.colors.heading};
-        padding-bottom: 16px;
+        border-left: 5px solid ${template.styles.colors.heading};
+        padding-left: 20px;
+        padding-bottom: 12px;
+        letter-spacing: -0.3px;
       }
 
       .chapter-content {
@@ -257,31 +298,100 @@ export class PDFExporter {
       }
 
       .chapter-content p {
-        margin-bottom: 20px;
+        margin-bottom: 24px;
         text-align: justify;
+        hyphens: auto;
+        word-spacing: 0.05em;
+      }
+
+      .chapter-content p:first-of-type::first-letter {
+        font-size: 3.5em;
+        font-weight: bold;
+        float: left;
+        line-height: 0.85;
+        margin: 0.05em 0.1em 0 0;
+        color: ${template.styles.colors.heading};
       }
 
       .chapter-content h2 {
-        font-size: 20pt;
-        font-weight: bold;
+        font-size: 22pt;
+        font-weight: 700;
         color: ${template.styles.colors.heading};
-        margin: 32px 0 16px 0;
+        margin: 40px 0 20px 0;
+        padding-top: 10px;
+        border-top: 2px solid rgba(0,0,0,0.1);
+        letter-spacing: -0.2px;
       }
 
       .chapter-content h3 {
-        font-size: 16pt;
+        font-size: 17pt;
         font-weight: 600;
         color: ${template.styles.colors.heading};
-        margin: 24px 0 12px 0;
+        margin: 32px 0 16px 0;
+        font-style: italic;
+      }
+
+      .chapter-content strong {
+        font-weight: 700;
+        color: #1a1a1a;
+      }
+
+      .chapter-content em {
+        font-style: italic;
+        color: #2a2a2a;
+      }
+
+      .chapter-content code {
+        font-family: 'Courier New', Courier, monospace;
+        background: #f5f5f5;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+        color: #c7254e;
+        border: 1px solid #e0e0e0;
       }
 
       .chapter-content ul,
       .chapter-content ol {
-        margin: 16px 0 16px 32px;
+        margin: 24px 0 24px 40px;
+        line-height: 1.9;
       }
 
       .chapter-content li {
-        margin-bottom: 8px;
+        margin-bottom: 12px;
+        padding-left: 8px;
+      }
+
+      .chapter-content ul li {
+        list-style-type: disc;
+      }
+
+      .chapter-content ol li {
+        list-style-type: decimal;
+      }
+
+      .chapter-content li strong {
+        color: ${template.styles.colors.heading};
+      }
+
+      .chapter-content blockquote {
+        margin: 30px 20px;
+        padding: 20px 25px;
+        border-left: 4px solid ${template.styles.colors.heading};
+        background: #f9f9f9;
+        font-style: italic;
+        color: #555;
+        position: relative;
+      }
+
+      .chapter-content blockquote::before {
+        content: '"';
+        font-size: 48pt;
+        color: ${template.styles.colors.heading};
+        opacity: 0.3;
+        position: absolute;
+        top: -10px;
+        left: 10px;
       }
 
       @media print {
@@ -289,6 +399,17 @@ export class PDFExporter {
         .toc-page,
         .chapter {
           page-break-after: always;
+        }
+
+        .chapter-content h2,
+        .chapter-content h3 {
+          page-break-after: avoid;
+        }
+
+        .chapter-content ul,
+        .chapter-content ol,
+        .chapter-content blockquote {
+          page-break-inside: avoid;
         }
       }
     `;
@@ -377,16 +498,16 @@ export class PDFExporter {
     }
 
     console.log('Formatting content, length:', content.length);
-    
+
     // Split by double newlines for paragraphs
     const paragraphs = content.split('\n\n').filter(p => p.trim());
-    
+
     console.log('Paragraphs found:', paragraphs.length);
 
     const formatted = paragraphs.map((paragraph) => {
       const trimmed = paragraph.trim();
 
-      // Headers
+      // Headers - escape HTML first, then wrap
       if (trimmed.startsWith('## ')) {
         return `<h2>${this.escapeHtml(trimmed.substring(3))}</h2>`;
       }
@@ -394,48 +515,65 @@ export class PDFExporter {
       if (trimmed.startsWith('### ')) {
         return `<h3>${this.escapeHtml(trimmed.substring(4))}</h3>`;
       }
-      
+
       if (trimmed.startsWith('# ')) {
         return `<h2>${this.escapeHtml(trimmed.substring(2))}</h2>`;
       }
 
-      // Unordered lists
+      // Unordered lists - process inline formatting
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
         const items = trimmed.split('\n')
           .filter(line => line.trim())
           .map(line => {
             const item = line.replace(/^[*\-]\s+/, '');
-            return `<li>${this.escapeHtml(item)}</li>`;
+            const formattedItem = this.formatInlineMarkdown(item);
+            return `<li>${formattedItem}</li>`;
           })
           .join('\n');
         return `<ul>${items}</ul>`;
       }
 
-      // Ordered lists
+      // Ordered lists - process inline formatting
       if (/^\d+\.\s/.test(trimmed)) {
         const items = trimmed.split('\n')
           .filter(line => line.trim())
           .map(line => {
             const item = line.replace(/^\d+\.\s+/, '');
-            return `<li>${this.escapeHtml(item)}</li>`;
+            const formattedItem = this.formatInlineMarkdown(item);
+            return `<li>${formattedItem}</li>`;
           })
           .join('\n');
         return `<ol>${items}</ol>`;
       }
-      
-      // Bold text **text**
-      let processed = trimmed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-      // Italic text *text*
-      processed = processed.replace(/\*(.+?)\*/g, '<em>$1</em>');
-      // Code `code`
-      processed = processed.replace(/`(.+?)`/g, '<code>$1</code>');
 
-      // Regular paragraph
-      return `<p>${this.escapeHtml(processed)}</p>`;
+      // Regular paragraph - process inline markdown formatting
+      const formattedText = this.formatInlineMarkdown(trimmed);
+      return `<p>${formattedText}</p>`;
     }).join('\n');
-    
+
     console.log('Content formatted successfully');
     return formatted;
+  }
+
+  /**
+   * Format inline markdown (bold, italic, code) within text
+   * Escapes HTML first, then applies markdown formatting
+   */
+  private formatInlineMarkdown(text: string): string {
+    // Escape HTML entities first
+    let escaped = this.escapeHtml(text);
+
+    // Now apply markdown formatting (safe because HTML is escaped)
+    // Bold text **text** - use non-greedy match and handle multiple occurrences
+    escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // Italic text *text* - but not if it's part of **
+    escaped = escaped.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+
+    // Code `code`
+    escaped = escaped.replace(/`(.+?)`/g, '<code>$1</code>');
+
+    return escaped;
   }
 
   private escapeHtml(text: string): string {

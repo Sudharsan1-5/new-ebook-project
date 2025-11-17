@@ -7,8 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
-const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions';
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -32,115 +30,174 @@ Deno.serve(async (req: Request) => {
 
     const { operation, data: requestData } = await req.json();
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    // Try to get Gemini API key from environment variable first, then database
+    let geminiKey = Deno.env.get('GEMINI_API_KEY');
+    let usageCount = 0;
 
-    const { data: apiKeyData, error: keyError } = await supabaseAdmin
-      .from('api_keys')
-      .select('api_key, usage_count')
-      .eq('service_name', 'mistral')
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
+    if (!geminiKey) {
+      // Fallback to database if env variable not set
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
 
-    if (keyError || !apiKeyData) {
-      throw new Error('Mistral API key not configured. Please contact administrator.');
+      const { data: apiKeyData, error: keyError } = await supabaseAdmin
+        .from('api_keys')
+        .select('api_key, usage_count')
+        .eq('service_name', 'gemini')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (keyError || !apiKeyData) {
+        throw new Error('Gemini API key not configured. Please add GEMINI_API_KEY environment variable or configure it in the database.');
+      }
+
+      geminiKey = apiKeyData.api_key;
+      usageCount = apiKeyData.usage_count || 0;
     }
 
-    const mistralKey = apiKeyData.api_key;
-
-    let messages = [];
-    let maxTokens = 2000;
+    let systemPrompt = '';
+    let userPrompt = '';
+    let maxTokens = 2048;
 
     switch (operation) {
       case 'generate_titles':
-        messages = [
-          {
-            role: 'system',
-            content: 'You are a creative book title generator. Generate compelling, marketable book titles.',
-          },
-          {
-            role: 'user',
-            content: `Generate 5 unique and engaging book titles for:\nTopic: ${requestData.topic}\nAudience: ${requestData.audience}\nTone: ${requestData.tone}\n\nReturn only the titles, one per line, without numbering or explanation.`,
-          },
-        ];
-        maxTokens = 200;
+        systemPrompt = 'You are a creative book title generator. Generate compelling, marketable book titles that will sell immediately and impress readers.';
+        userPrompt = `Generate 5 unique, engaging, and highly marketable book titles for:
+Topic: ${requestData.topic}
+Audience: ${requestData.audience}
+Tone: ${requestData.tone}
+
+These titles should be attention-grabbing, memorable, and make people want to buy the book immediately.
+Return only the titles, one per line, without numbering or explanation.`;
+        maxTokens = 300;
         break;
 
       case 'generate_outline':
         const chapterCount = requestData.chapterCount || 8;
-        messages = [
-          {
-            role: 'system',
-            content: 'You are an expert book outline creator. Create clear, logical chapter structures.',
-          },
-          {
-            role: 'user',
-            content: `Create a ${chapterCount}-chapter outline for an eBook:\nTitle: ${requestData.title}\nTopic: ${requestData.topic}\nAudience: ${requestData.audience}\nTone: ${requestData.tone}\n\nReturn only the chapter titles, one per line, without numbering or explanation.`,
-          },
-        ];
-        maxTokens = 500;
+        systemPrompt = 'You are an expert book outline creator. Create clear, logical chapter structures that build upon each other for maximum impact.';
+        userPrompt = `Create a ${chapterCount}-chapter outline for an eBook:
+Title: ${requestData.title}
+Topic: ${requestData.topic}
+Audience: ${requestData.audience}
+Tone: ${requestData.tone}
+
+Create chapter titles that are compelling, flow logically, and build reader engagement throughout the book.
+Return only the chapter titles, one per line, without numbering or explanation.`;
+        maxTokens = 600;
         break;
 
       case 'generate_chapter':
-        messages = [
-          {
-            role: 'system',
-            content: `You are a professional book writer. Write engaging, well-structured chapter content in a ${requestData.tone} tone for ${requestData.audience}.`,
-          },
-          {
-            role: 'user',
-            content: `Write the full content for this chapter:\n\nBook Title: ${requestData.bookTitle}\nChapter ${requestData.chapterNumber}: ${requestData.chapterTitle}\nAudience: ${requestData.audience}\nTone: ${requestData.tone}\n\nWrite approximately 1500-2000 words. Include an engaging introduction, well-developed main points with examples, and a smooth transition.`,
-          },
-        ];
-        maxTokens = 3000;
+        systemPrompt = `You are a professional bestselling author. Write engaging, well-structured, and highly valuable chapter content in a ${requestData.tone} tone for ${requestData.audience}. Your writing should be compelling, easy to read, and provide real value that makes readers feel they've learned something important.`;
+        userPrompt = `Write the full content for this chapter:
+
+Book Title: ${requestData.bookTitle}
+Chapter ${requestData.chapterNumber}: ${requestData.chapterTitle}
+Audience: ${requestData.audience}
+Tone: ${requestData.tone}
+
+Write approximately 1500-2000 words. Structure your content with:
+- An engaging opening that hooks the reader
+- Clear section headings using ## for main sections and ### for subsections
+- Well-developed main points with concrete examples and actionable advice
+- Bullet points or numbered lists where appropriate for clarity
+- A compelling conclusion that transitions smoothly to the next chapter
+
+Make the content valuable, professional, and engaging - something people would be excited to read and share.`;
+        maxTokens = 4096;
         break;
 
       default:
         throw new Error('Invalid operation');
     }
 
-    const mistralResponse = await fetch(MISTRAL_API_URL, {
+    // Combine system and user prompts for Gemini
+    const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
+    // Call Gemini API using REST endpoint
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+
+    const geminiResponse = await fetch(geminiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${mistralKey}`,
       },
       body: JSON.stringify({
-        model: 'mistral-small-latest',
-        messages,
-        max_tokens: maxTokens,
-        temperature: 0.7,
+        contents: [{
+          parts: [{
+            text: fullPrompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: maxTokens,
+          topP: 0.95,
+          topK: 40,
+        },
+        safetySettings: [
+          {
+            category: 'HARM_CATEGORY_HARASSMENT',
+            threshold: 'BLOCK_NONE'
+          },
+          {
+            category: 'HARM_CATEGORY_HATE_SPEECH',
+            threshold: 'BLOCK_NONE'
+          },
+          {
+            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            threshold: 'BLOCK_NONE'
+          },
+          {
+            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            threshold: 'BLOCK_NONE'
+          }
+        ]
       }),
     });
 
-    if (!mistralResponse.ok) {
-      const errorText = await mistralResponse.text();
-      throw new Error(`Mistral API error: ${errorText}`);
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      throw new Error(`Gemini API error: ${errorText}`);
     }
 
-    const result = await mistralResponse.json();
-    const content = result.choices[0].message.content;
+    const result = await geminiResponse.json();
 
-    await supabaseAdmin.from('usage_logs').insert({
-      user_id: user.id,
-      ebook_id: requestData.ebookId || null,
-      service_name: 'mistral',
-      operation,
-      tokens_used: result.usage?.total_tokens || 0,
-      success: true,
-    });
+    // Extract content from Gemini response format
+    if (!result.candidates || result.candidates.length === 0) {
+      throw new Error('No content generated by Gemini');
+    }
 
-    await supabaseAdmin
-      .from('api_keys')
-      .update({
-        usage_count: (apiKeyData.usage_count || 0) + 1,
-        last_used_at: new Date().toISOString(),
-      })
-      .eq('service_name', 'mistral')
-      .eq('is_active', true);
+    const content = result.candidates[0].content.parts[0].text;
+
+    // Estimate tokens used (Gemini doesn't provide exact token count in response)
+    const tokensUsed = Math.ceil((fullPrompt.length + content.length) / 4);
+
+    // Log usage if we're using database API key (not env variable)
+    if (!Deno.env.get('GEMINI_API_KEY')) {
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      await supabaseAdmin.from('usage_logs').insert({
+        user_id: user.id,
+        ebook_id: requestData.ebookId || null,
+        service_name: 'gemini',
+        operation,
+        tokens_used: tokensUsed,
+        success: true,
+      });
+
+      await supabaseAdmin
+        .from('api_keys')
+        .update({
+          usage_count: usageCount + 1,
+          last_used_at: new Date().toISOString(),
+        })
+        .eq('service_name', 'gemini')
+        .eq('is_active', true);
+    }
 
     return new Response(
       JSON.stringify({ success: true, content }),

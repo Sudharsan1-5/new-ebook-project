@@ -41,7 +41,7 @@ export class EPUBExporter {
     this.zip.folder('OEBPS/text');
   }
 
-  private addContent(ebook: EBook, chapters: Chapter[], template: Template) {
+  private addContent(ebook: EBook, chapters: Chapter[], _template: Template) {
     const coverHtml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -65,7 +65,7 @@ export class EPUBExporter {
     });
   }
 
-  private createChapterHTML(chapter: Chapter, bookTitle: string): string {
+  private createChapterHTML(chapter: Chapter, _bookTitle: string): string {
     const paragraphs = chapter.content
       .split('\n\n')
       .filter(p => p.trim())
@@ -91,7 +91,7 @@ ${paragraphs}
 </html>`;
   }
 
-  private addTOC(ebook: EBook, chapters: Chapter[]) {
+  private addTOC(_ebook: EBook, chapters: Chapter[]) {
     const navItems = chapters
       .map((ch) =>
         `      <li><a href="text/chapter${ch.chapter_number}.xhtml">Chapter ${ch.chapter_number}: ${this.escapeXml(ch.title)}</a></li>`

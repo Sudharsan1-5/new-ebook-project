@@ -20,6 +20,13 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
   const [currentStep, setCurrentStep] = useState<WizardStep>('input');
   const [loading, setLoading] = useState(false);
 
+  // Progress tracking state
+  const [progressMessage, setProgressMessage] = useState('');
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [currentChapter, setCurrentChapter] = useState(0);
+  const [totalChapters, setTotalChapters] = useState(0);
+  const [estimatedTime, setEstimatedTime] = useState('');
+
   const [topic, setTopic] = useState('');
   const [audience, setAudience] = useState('');
   const [tone, setTone] = useState<'self-help' | 'fiction' | 'journal' | 'guide' | 'professional'>('guide');
@@ -78,14 +85,31 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
   const generateTitles = async () => {
     setLoading(true);
     setError('');
+    setProgressMessage('Analyzing your topic and generating creative titles...');
+    setProgressPercent(30);
+    setEstimatedTime('~10 seconds');
+
     try {
       const mistral = new MistralService();
       const titles = await mistral.generateTitles({ topic, audience, tone });
+
+      setProgressPercent(100);
+      setProgressMessage('Titles generated successfully!');
+
       setGeneratedTitles(titles);
       setSelectedTitle(titles[0] || `The Complete Guide to ${topic}`);
+
+      // Clear progress after short delay
+      setTimeout(() => {
+        setProgressMessage('');
+        setProgressPercent(0);
+        setEstimatedTime('');
+      }, 1000);
     } catch (err: any) {
       setError(err.message || 'Failed to generate titles');
       console.error('Title generation error:', err);
+      setProgressMessage('');
+      setProgressPercent(0);
     } finally {
       setLoading(false);
     }
@@ -94,9 +118,17 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
   const generateOutline = async () => {
     setLoading(true);
     setError('');
+    setProgressMessage('Structuring your book and creating chapter outline...');
+    setProgressPercent(40);
+    setEstimatedTime('~15 seconds');
+
     try {
       const mistral = new MistralService();
       const outline = await mistral.generateChapterOutline({ title: selectedTitle, topic, audience, tone, chapterCount: 8 });
+
+      setProgressPercent(100);
+      setProgressMessage('Chapter outline created successfully!');
+
       const chapterList: Chapter[] = outline.map((ch) => ({
         id: ch.number.toString(),
         ebook_id: '',
@@ -107,9 +139,18 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
         created_at: new Date().toISOString()
       }));
       setChapters(chapterList);
+
+      // Clear progress after short delay
+      setTimeout(() => {
+        setProgressMessage('');
+        setProgressPercent(0);
+        setEstimatedTime('');
+      }, 1000);
     } catch (err: any) {
       setError(err.message || 'Failed to generate outline');
       console.error('Outline generation error:', err);
+      setProgressMessage('');
+      setProgressPercent(0);
     } finally {
       setLoading(false);
     }
@@ -118,11 +159,26 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
   const generateContent = async () => {
     setLoading(true);
     setError('');
+
+    const totalChaps = chapters.length;
+    setTotalChapters(totalChaps);
+
+    // Estimate total time: ~30-40 seconds per chapter
+    const estimatedMinutes = Math.ceil((totalChaps * 35) / 60);
+    setEstimatedTime(estimatedMinutes > 1 ? `~${estimatedMinutes} minutes` : '~1 minute');
+
     try {
       const mistral = new MistralService();
       const updatedChapters = [];
 
-      for (const chapter of chapters) {
+      for (let i = 0; i < chapters.length; i++) {
+        const chapter = chapters[i];
+
+        // Update progress for current chapter
+        setCurrentChapter(i + 1);
+        setProgressMessage(`Writing Chapter ${i + 1}: "${chapter.title}"`);
+        setProgressPercent(Math.round(((i + 1) / totalChaps) * 100));
+
         const content = await mistral.generateChapterContent(
           selectedTitle,
           chapter.title,
@@ -130,17 +186,39 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
           tone,
           audience
         );
+
         updatedChapters.push({
           ...chapter,
           content,
           word_count: content.split(/\s+/).length
         });
+
+        // Update progress message after chapter completion
+        setProgressMessage(`✓ Chapter ${i + 1} completed (${content.split(/\s+/).length} words)`);
+
+        // Brief pause to show completion before moving to next
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
+      setProgressMessage('All chapters generated successfully! 🎉');
+      setProgressPercent(100);
       setChapters(updatedChapters);
+
+      // Clear progress after delay
+      setTimeout(() => {
+        setProgressMessage('');
+        setProgressPercent(0);
+        setCurrentChapter(0);
+        setTotalChapters(0);
+        setEstimatedTime('');
+      }, 2000);
     } catch (err: any) {
       setError(err.message || 'Failed to generate content');
       console.error('Content generation error:', err);
+      setProgressMessage('');
+      setProgressPercent(0);
+      setCurrentChapter(0);
+      setTotalChapters(0);
     } finally {
       setLoading(false);
     }
@@ -149,6 +227,9 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
   const handleGenerateCover = async () => {
     setGeneratingCover(true);
     setError('');
+    setProgressMessage('Creating your AI-generated book cover...');
+    setProgressPercent(50);
+    setEstimatedTime('~20-30 seconds');
 
     try {
       // Build the prompt with user input and book context
@@ -220,11 +301,21 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
 
       const url = URL.createObjectURL(imageBlob);
       setGeneratedCoverUrl(url);
+
+      setProgressPercent(100);
+      setProgressMessage('Cover generated successfully!');
       console.log('Cover generated successfully!');
+
+      // Clear progress after delay
+      setTimeout(() => {
+        setProgressMessage('');
+        setProgressPercent(0);
+        setEstimatedTime('');
+      }, 2000);
     } catch (err: any) {
       console.error('Cover generation error:', err);
       let errorMessage = 'Failed to generate cover.';
-      
+
       if (err.message?.includes('Stability AI API key not configured')) {
         errorMessage = 'Stability AI API key not configured. Please contact administrator.';
       } else if (err.message?.includes('Unauthorized') || err.message?.includes('Not authenticated')) {
@@ -234,8 +325,11 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
+      setProgressMessage('');
+      setProgressPercent(0);
+      setEstimatedTime('');
     } finally {
       setGeneratingCover(false);
     }
@@ -711,6 +805,38 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
             })}
           </div>
         </div>
+
+        {/* Progress Indicator */}
+        {(loading || generatingCover) && progressMessage && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                <span className="text-sm font-medium text-blue-900">{progressMessage}</span>
+              </div>
+              {estimatedTime && (
+                <span className="text-xs text-blue-700 bg-blue-100 px-2 py-1 rounded">
+                  {estimatedTime}
+                </span>
+              )}
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full bg-blue-200 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+
+            {/* Chapter Progress Counter */}
+            {totalChapters > 0 && (
+              <div className="mt-2 text-xs text-blue-700 text-center">
+                Chapter {currentChapter} of {totalChapters}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto">
           {renderStepContent()}

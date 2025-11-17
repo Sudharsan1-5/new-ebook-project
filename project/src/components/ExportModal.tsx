@@ -26,10 +26,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [exporting, setExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>(null);
   const [includeCover, setIncludeCover] = useState(true);
+  const [exportProgress, setExportProgress] = useState('');
 
   const handleExportPDF = async () => {
     setExporting(true);
     setExportFormat('pdf');
+    setExportProgress('Preparing PDF export...');
 
     // 💡 Added check for chapters content to help debug blank PDFs
     if (chapters.length === 0 || chapters.every(c => !c.content?.trim())) {
@@ -37,18 +39,20 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
 
     try {
-      // Console logs removed for cleaner final code, but kept in the prompt for debugging context
-
       const template = getTemplateById('minimal-professional') || templates[0];
       const exporter = new PDFExporter();
-      
+
+      setExportProgress('Formatting content and rendering PDF... (~5-10 seconds)');
+
       const blob = await exporter.exportEBook(
-        ebook, 
-        chapters, 
-        template, 
+        ebook,
+        chapters,
+        template,
         includeCover,
         ebook.cover_url || undefined
       );
+
+      setExportProgress('Downloading PDF...');
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -59,26 +63,35 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      setExportProgress('PDF exported successfully!');
+
       setTimeout(() => {
         setExporting(false);
         setExportFormat(null);
-      }, 1000);
+        setExportProgress('');
+      }, 1500);
     } catch (error) {
       console.error('PDF export failed:', error);
       alert('Failed to export PDF. Please try again.');
       setExporting(false);
       setExportFormat(null);
+      setExportProgress('');
     }
   };
 
   const handleExportEPUB = async () => {
     setExporting(true);
     setExportFormat('epub');
+    setExportProgress('Preparing EPUB export...');
 
     try {
       const template = getTemplateById('minimal-professional') || templates[0];
       const exporter = new EPUBExporter();
+
+      setExportProgress('Creating EPUB structure... (~3-5 seconds)');
       const blob = await exporter.exportEBook(ebook, chapters, template);
+
+      setExportProgress('Downloading EPUB...');
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -89,15 +102,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      setExportProgress('EPUB exported successfully!');
+
       setTimeout(() => {
         setExporting(false);
         setExportFormat(null);
-      }, 1000);
+        setExportProgress('');
+      }, 1500);
     } catch (error) {
       console.error('EPUB export failed:', error);
       alert('Failed to export EPUB. Please try again.');
       setExporting(false);
       setExportFormat(null);
+      setExportProgress('');
     }
   };
 
@@ -108,7 +125,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
 
     setExporting(true);
-    setExportFormat('mockup'); // 💡 Corrected state to 'mockup'
+    setExportFormat('mockup');
+    setExportProgress('Creating 3D book mockup...');
 
     try {
       // Create a canvas for the 3D mockup
@@ -196,6 +214,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       ctx.textAlign = 'center';
       ctx.fillText(ebook.title, canvas.width / 2, canvas.height - 80);
       
+      setExportProgress('Rendering mockup and downloading...');
+
       // 💡 Wrap canvas.toBlob in a Promise to use async/await and centralize error handling
       await new Promise<void>((resolve, reject) => {
           canvas.toBlob((blob) => {
@@ -217,15 +237,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           }, 'image/png', 0.95);
       });
 
+      setExportProgress('Mockup exported successfully!');
+
       setTimeout(() => {
         setExporting(false);
         setExportFormat(null);
-      }, 1000);
+        setExportProgress('');
+      }, 1500);
     } catch (error) {
       console.error('Mockup generation failed:', error);
       alert(`Failed to generate mockup. ${(error as Error).message}`);
       setExporting(false);
       setExportFormat(null);
+      setExportProgress('');
     }
   };
 
@@ -240,6 +264,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <span>{ebook.word_count.toLocaleString()} words</span>
           </div>
         </div>
+
+        {/* Export Progress Indicator */}
+        {exporting && exportProgress && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+              <span className="text-sm font-medium text-blue-900">{exportProgress}</span>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-4">
           {/* Include Cover Option */}

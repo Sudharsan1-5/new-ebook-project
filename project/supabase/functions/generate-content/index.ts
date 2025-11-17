@@ -30,24 +30,32 @@ Deno.serve(async (req: Request) => {
 
     const { operation, data: requestData } = await req.json();
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    // Try to get Gemini API key from environment variable first, then database
+    let geminiKey = Deno.env.get('GEMINI_API_KEY');
+    let usageCount = 0;
 
-    const { data: apiKeyData, error: keyError } = await supabaseAdmin
-      .from('api_keys')
-      .select('api_key, usage_count')
-      .eq('service_name', 'gemini')
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
+    if (!geminiKey) {
+      // Fallback to database if env variable not set
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
 
-    if (keyError || !apiKeyData) {
-      throw new Error('Gemini API key not configured. Please contact administrator.');
+      const { data: apiKeyData, error: keyError } = await supabaseAdmin
+        .from('api_keys')
+        .select('api_key, usage_count')
+        .eq('service_name', 'gemini')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (keyError || !apiKeyData) {
+        throw new Error('Gemini API key not configured. Please add GEMINI_API_KEY environment variable or configure it in the database.');
+      }
+
+      geminiKey = apiKeyData.api_key;
+      usageCount = apiKeyData.usage_count || 0;
     }
-
-    const geminiKey = apiKeyData.api_key;
 
     let systemPrompt = '';
     let userPrompt = '';
@@ -165,23 +173,31 @@ Make the content valuable, professional, and engaging - something people would b
     // Estimate tokens used (Gemini doesn't provide exact token count in response)
     const tokensUsed = Math.ceil((fullPrompt.length + content.length) / 4);
 
-    await supabaseAdmin.from('usage_logs').insert({
-      user_id: user.id,
-      ebook_id: requestData.ebookId || null,
-      service_name: 'gemini',
-      operation,
-      tokens_used: tokensUsed,
-      success: true,
-    });
+    // Log usage if we're using database API key (not env variable)
+    if (!Deno.env.get('GEMINI_API_KEY')) {
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
 
-    await supabaseAdmin
-      .from('api_keys')
-      .update({
-        usage_count: (apiKeyData.usage_count || 0) + 1,
-        last_used_at: new Date().toISOString(),
-      })
-      .eq('service_name', 'gemini')
-      .eq('is_active', true);
+      await supabaseAdmin.from('usage_logs').insert({
+        user_id: user.id,
+        ebook_id: requestData.ebookId || null,
+        service_name: 'gemini',
+        operation,
+        tokens_used: tokensUsed,
+        success: true,
+      });
+
+      await supabaseAdmin
+        .from('api_keys')
+        .update({
+          usage_count: usageCount + 1,
+          last_used_at: new Date().toISOString(),
+        })
+        .eq('service_name', 'gemini')
+        .eq('is_active', true);
+    }
 
     return new Response(
       JSON.stringify({ success: true, content }),

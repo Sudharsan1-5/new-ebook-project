@@ -1,15 +1,36 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
+// Security: Only allow requests from configured origin
+const getAllowedOrigin = (requestOrigin: string | null): string => {
+  const allowedOrigin = Deno.env.get('ALLOWED_ORIGIN');
+
+  if (allowedOrigin && requestOrigin === allowedOrigin) {
+    return allowedOrigin;
+  }
+
+  // Fallback: allow localhost for development
+  if (requestOrigin?.includes('localhost') || requestOrigin?.includes('127.0.0.1')) {
+    return requestOrigin;
+  }
+
+  // Default: no origin allowed (security)
+  return 'null';
 };
+
+const getCorsHeaders = (origin: string | null) => ({
+  'Access-Control-Allow-Origin': getAllowedOrigin(origin),
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Max-Age': '86400',
+});
 
 const STABILITY_API_URL = 'https://api.stability.ai/v2beta/stable-image/generate/core';
 
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -30,7 +51,35 @@ Deno.serve(async (req: Request) => {
       throw new Error('Unauthorized');
     }
 
-    const { theme, mood, style, aspectRatio = '2:3' } = await req.json();
+    // Input validation
+    const rawBody = await req.json();
+    const { theme, mood, style, aspectRatio = '2:3' } = rawBody;
+
+    // Validate theme (required)
+    if (!theme || typeof theme !== 'string' || theme.trim().length === 0) {
+      throw new Error('Theme is required');
+    }
+    if (theme.length > 500) {
+      throw new Error('Theme must be less than 500 characters');
+    }
+
+    // Validate style
+    const validStyles = ['minimal', 'artistic', 'professional'];
+    if (style && !validStyles.includes(style)) {
+      throw new Error('Invalid style specified');
+    }
+
+    // Validate mood
+    const validMoods = ['self-help', 'fiction', 'journal', 'guide', 'professional'];
+    if (mood && !validMoods.includes(mood)) {
+      throw new Error('Invalid mood specified');
+    }
+
+    // Validate aspect ratio
+    const validAspectRatios = ['1:1', '2:3', '3:2', '4:5', '16:9'];
+    if (aspectRatio && !validAspectRatios.includes(aspectRatio)) {
+      throw new Error('Invalid aspect ratio');
+    }
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

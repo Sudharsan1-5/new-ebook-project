@@ -1,13 +1,34 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
+// Security: Only allow requests from configured origin
+const getAllowedOrigin = (requestOrigin: string | null): string => {
+  const allowedOrigin = Deno.env.get('ALLOWED_ORIGIN');
+
+  if (allowedOrigin && requestOrigin === allowedOrigin) {
+    return allowedOrigin;
+  }
+
+  // Fallback: allow localhost for development
+  if (requestOrigin?.includes('localhost') || requestOrigin?.includes('127.0.0.1')) {
+    return requestOrigin;
+  }
+
+  // Default: no origin allowed (security)
+  return 'null';
 };
 
+const getCorsHeaders = (origin: string | null) => ({
+  'Access-Control-Allow-Origin': getAllowedOrigin(origin),
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Max-Age': '86400',
+});
+
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -28,7 +49,72 @@ Deno.serve(async (req: Request) => {
       throw new Error('Unauthorized');
     }
 
-    const { operation, data: requestData } = await req.json();
+    // Input validation
+    const rawBody = await req.json();
+    const { operation, data: requestData } = rawBody;
+
+    // Validate operation
+    const validOperations = ['generate_titles', 'generate_outline', 'generate_chapter'];
+    if (!operation || !validOperations.includes(operation)) {
+      throw new Error('Invalid operation specified');
+    }
+
+    // Validate and sanitize input data
+    if (!requestData || typeof requestData !== 'object') {
+      throw new Error('Invalid request data');
+    }
+
+    // Input length validation (prevent DoS)
+    const validateString = (value: unknown, fieldName: string, minLength: number, maxLength: number): string => {
+      if (typeof value !== 'string') {
+        throw new Error(`${fieldName} must be a string`);
+      }
+      const trimmed = value.trim();
+      if (trimmed.length < minLength || trimmed.length > maxLength) {
+        throw new Error(`${fieldName} must be between ${minLength} and ${maxLength} characters`);
+      }
+      return trimmed;
+    };
+
+    // Validate common fields
+    if (requestData.topic) {
+      requestData.topic = validateString(requestData.topic, 'Topic', 1, 500);
+    }
+    if (requestData.audience) {
+      requestData.audience = validateString(requestData.audience, 'Audience', 1, 200);
+    }
+    if (requestData.title) {
+      requestData.title = validateString(requestData.title, 'Title', 1, 200);
+    }
+    if (requestData.bookTitle) {
+      requestData.bookTitle = validateString(requestData.bookTitle, 'Book Title', 1, 200);
+    }
+    if (requestData.chapterTitle) {
+      requestData.chapterTitle = validateString(requestData.chapterTitle, 'Chapter Title', 1, 200);
+    }
+
+    // Validate tone
+    const validTones = ['self-help', 'fiction', 'journal', 'guide', 'professional'];
+    if (requestData.tone && !validTones.includes(requestData.tone)) {
+      throw new Error('Invalid tone specified');
+    }
+
+    // Validate chapter count and number
+    if (requestData.chapterCount !== undefined) {
+      const count = Number(requestData.chapterCount);
+      if (isNaN(count) || count < 1 || count > 20) {
+        throw new Error('Chapter count must be between 1 and 20');
+      }
+      requestData.chapterCount = count;
+    }
+
+    if (requestData.chapterNumber !== undefined) {
+      const num = Number(requestData.chapterNumber);
+      if (isNaN(num) || num < 1) {
+        throw new Error('Invalid chapter number');
+      }
+      requestData.chapterNumber = num;
+    }
 
     // Try to get Gemini API key from environment variable first, then database
     let geminiKey = Deno.env.get('GEMINI_API_KEY');

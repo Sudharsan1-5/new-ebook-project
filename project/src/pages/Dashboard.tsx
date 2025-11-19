@@ -71,34 +71,40 @@ export const Dashboard: React.FC<{ onNavigateToAdmin?: () => void }> = ({ onNavi
 
     setLoading(true);
     try {
-      const { data: ebooks, error: ebooksError } = await supabase
+      // ✅ FIXED N+1 Query Problem: Use single JOIN query instead of separate queries per ebook
+      // Before: 1 query for ebooks + N queries for chapters = N+1 queries total
+      // After: 1 query total with JOIN - massive performance improvement!
+      const { data: ebooksWithChapters, error: ebooksError } = await supabase
         .from('ebooks')
-        .select('*')
+        .select(`
+          *,
+          chapters (
+            id,
+            ebook_id,
+            chapter_number,
+            title,
+            content,
+            word_count,
+            created_at,
+            updated_at
+          )
+        `)
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .order('chapter_number', { foreignTable: 'chapters', ascending: true });
 
       if (ebooksError) throw ebooksError;
 
-      const projectsWithChapters = await Promise.all(
-        (ebooks || []).map(async (ebook) => {
-          const { data: chapters, error: chaptersError } = await supabase
-            .from('chapters')
-            .select('*')
-            .eq('ebook_id', ebook.id)
-            .order('chapter_number');
-
-          if (chaptersError) {
-            console.error('Error loading chapters:', chaptersError);
-            return { ...ebook, chapters: [] };
-          }
-
-          return { ...ebook, chapters: chapters || [] };
-        })
-      );
+      // Transform joined data to match expected EBookProject structure
+      const projectsWithChapters = (ebooksWithChapters || []).map(ebook => ({
+        ...ebook,
+        chapters: ebook.chapters || []
+      }));
 
       setProjects(projectsWithChapters);
     } catch (error) {
-      console.error('Error loading projects:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('Error loading projects:', errorMessage);
     } finally {
       setLoading(false);
     }

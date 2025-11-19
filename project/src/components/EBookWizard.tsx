@@ -8,6 +8,7 @@ import { Modal } from './Modal';
 import { Chapter, EBook } from '../types';
 import { MistralService } from '../lib/mistral';
 import { supabase } from '../lib/supabase';
+import { getUserFriendlyError } from '../lib/errors';
 
 interface EBookWizardProps {
   onClose: () => void;
@@ -46,11 +47,9 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
   const [generatingCover, setGeneratingCover] = useState(false);
   const [generatedCoverUrl, setGeneratedCoverUrl] = useState<string | null>(null);
 
-  // Helper function to safely extract error messages
+  // Helper function to extract user-friendly error messages
   const getErrorMessage = (error: unknown, fallback: string): string => {
-    if (error instanceof Error) return error.message;
-    if (typeof error === 'string') return error;
-    return fallback;
+    return getUserFriendlyError(error, fallback);
   };
 
   const steps: { id: WizardStep; label: string; icon: LucideIcon }[] = [

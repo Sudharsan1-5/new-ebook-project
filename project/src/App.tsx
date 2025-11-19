@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Login } from './pages/Login';
 import { SignUp } from './pages/SignUp';
 import { Dashboard } from './pages/Dashboard';
@@ -59,26 +60,40 @@ const AppContent: React.FC = () => {
 
   if (!user) {
     return authView === 'login' ? (
-      <Login onNavigateToSignUp={() => setAuthView('signup')} />
+      <ErrorBoundary>
+        <Login onNavigateToSignUp={() => setAuthView('signup')} />
+      </ErrorBoundary>
     ) : (
-      <SignUp onNavigateToLogin={() => setAuthView('login')} />
+      <ErrorBoundary>
+        <SignUp onNavigateToLogin={() => setAuthView('login')} />
+      </ErrorBoundary>
     );
   }
 
   if (appView === 'admin' && userRole === 'admin') {
-    return <AdminPanel onNavigateToDashboard={() => setAppView('dashboard')} />;
+    return (
+      <ErrorBoundary>
+        <AdminPanel onNavigateToDashboard={() => setAppView('dashboard')} />
+      </ErrorBoundary>
+    );
   }
 
-  return <Dashboard onNavigateToAdmin={userRole === 'admin' ? () => setAppView('admin') : undefined} />;
+  return (
+    <ErrorBoundary>
+      <Dashboard onNavigateToAdmin={userRole === 'admin' ? () => setAppView('admin') : undefined} />
+    </ErrorBoundary>
+  );
 };
 
 function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -7,6 +7,7 @@ import { EPUBExporter } from '../lib/export-epub';
 import { templates, getTemplateById } from '../lib/templates';
 import { EBook, Chapter } from '../types';
 import { useToast } from '../contexts/ToastContext';
+import { getUserFriendlyError } from '../lib/errors';
 
 // Updated exportFormat type to include 'mockup'
 type ExportFormat = 'pdf' | 'epub' | 'mockup' | null;
@@ -74,7 +75,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       }, 1500);
     } catch (error) {
       console.error('PDF export failed:', error);
-      toast.error('Failed to export PDF. Please try again.');
+      toast.error(getUserFriendlyError(error, 'Failed to export PDF. Please try again.'));
       setExporting(false);
       setExportFormat(null);
       setExportProgress('');
@@ -113,7 +114,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       }, 1500);
     } catch (error) {
       console.error('EPUB export failed:', error);
-      toast.error('Failed to export EPUB. Please try again.');
+      toast.error(getUserFriendlyError(error, 'Failed to export EPUB. Please try again.'));
       setExporting(false);
       setExportFormat(null);
       setExportProgress('');
@@ -248,7 +249,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       }, 1500);
     } catch (error) {
       console.error('Mockup generation failed:', error);
-      toast.error(`Failed to generate mockup. ${(error as Error).message}`);
+      toast.error(getUserFriendlyError(error, 'Failed to generate mockup. Please try again.'));
       setExporting(false);
       setExportFormat(null);
       setExportProgress('');

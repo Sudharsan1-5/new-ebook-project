@@ -1,5 +1,6 @@
 import { AIGenerationOptions } from '../types';
 import { supabase } from './supabase';
+import { fetchWithRetry } from './retry';
 
 /**
  * Edge Function request data types
@@ -35,34 +36,43 @@ type EdgeFunctionData = GenerateTitlesData | GenerateOutlineData | GenerateChapt
  */
 export class MistralService {
   private async callEdgeFunction(operation: string, data: EdgeFunctionData): Promise<string> {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
 
-      if (!session) {
-        throw new Error('Not authenticated');
-      }
+    if (!session) {
+      throw new Error('Not authenticated');
+    }
 
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-content`;
+    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-content`;
 
-      const response = await fetch(apiUrl, {
+    // Use retry logic with timeout for resilient API calls
+    // Content generation can take 30-60s, so use generous timeout
+    const response = await fetchWithRetry(
+      apiUrl,
+      {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ operation, data })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Content generation failed');
+      },
+      {
+        maxAttempts: 3,
+        timeoutMs: 60000, // 60 second timeout for AI generation
+        initialDelayMs: 2000, // Start with 2s delay
+        onRetry: (attempt, error) => {
+          console.error(`API call failed (attempt ${attempt}):`, error);
+        }
       }
+    );
 
-      const result = await response.json();
-      return result.content;
-    } catch (error) {
-      throw error;
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Content generation failed');
     }
+
+    const result = await response.json();
+    return result.content;
   }
 
   async generateTitles(options: AIGenerationOptions): Promise<string[]> {

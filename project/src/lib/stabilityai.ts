@@ -1,3 +1,5 @@
+import { fetchWithRetry } from './retry';
+
 const STABILITY_API_URL = 'https://api.stability.ai/v2beta/stable-image/generate/core';
 
 export interface CoverGenerationOptions {
@@ -17,35 +19,52 @@ export class StabilityAIService {
   async generateCover(options: CoverGenerationOptions): Promise<string> {
     const prompt = this.buildPrompt(options);
 
-    try {
-      const formData = new FormData();
-      formData.append('prompt', prompt);
-      formData.append('output_format', 'png');
-      formData.append('aspect_ratio', options.aspectRatio || '2:3');
+    const formData = new FormData();
+    formData.append('prompt', prompt);
+    formData.append('output_format', 'png');
+    formData.append('aspect_ratio', options.aspectRatio || '2:3');
 
-      const response = await fetch(STABILITY_API_URL, {
+    // Use retry logic with timeout for resilient image generation
+    const response = await fetchWithRetry(
+      STABILITY_API_URL,
+      {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Accept': 'image/*'
         },
         body: formData
-      });
-
-      if (!response.ok) {
-        if (response.status === 403) {
-          throw new Error('Invalid API key or insufficient credits');
+      },
+      {
+        maxAttempts: 3,
+        timeoutMs: 45000, // 45 second timeout for image generation
+        initialDelayMs: 2000,
+        shouldRetry: (error) => {
+          // Don't retry on auth errors (403) or client errors (4xx)
+          if (error instanceof Error) {
+            const message = error.message.toLowerCase();
+            if (message.includes('403') || message.includes('invalid api key')) {
+              return false;
+            }
+          }
+          return true; // Retry on other errors
+        },
+        onRetry: (attempt, error) => {
+          console.error(`Cover generation failed (attempt ${attempt}):`, error);
         }
-        const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-        throw new Error(error.message || 'StabilityAI API request failed');
       }
+    );
 
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
-    } catch (error) {
-      console.error('StabilityAI API Error:', error);
-      throw error;
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error('Invalid API key or insufficient credits');
+      }
+      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new Error(error.message || 'StabilityAI API request failed');
     }
+
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
   }
 
   private buildPrompt(options: CoverGenerationOptions): string {
@@ -62,12 +81,6 @@ export class StabilityAIService {
 
   async generateMultipleCovers(options: CoverGenerationOptions, count: number = 3): Promise<string[]> {
     const promises = Array(count).fill(null).map(() => this.generateCover(options));
-
-    try {
-      return await Promise.all(promises);
-    } catch (error) {
-      console.error('Error generating multiple covers:', error);
-      throw error;
-    }
+    return await Promise.all(promises);
   }
 }

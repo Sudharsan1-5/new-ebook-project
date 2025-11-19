@@ -2,11 +2,39 @@ import { AIGenerationOptions } from '../types';
 import { supabase } from './supabase';
 
 /**
+ * Edge Function request data types
+ */
+interface GenerateTitlesData {
+  topic: string;
+  audience: string;
+  tone: string;
+}
+
+interface GenerateOutlineData {
+  title: string;
+  topic: string;
+  audience: string;
+  tone: string;
+  chapterCount: number;
+}
+
+interface GenerateChapterData {
+  bookTitle: string;
+  chapterTitle: string;
+  chapterNumber: number;
+  tone: string;
+  audience: string;
+  ebookId?: string;
+}
+
+type EdgeFunctionData = GenerateTitlesData | GenerateOutlineData | GenerateChapterData;
+
+/**
  * AI Content Generation Service using Google Gemini AI
  * This service generates book titles, chapter outlines, and chapter content
  */
 export class MistralService {
-  private async callEdgeFunction(operation: string, data: any): Promise<string> {
+  private async callEdgeFunction(operation: string, data: EdgeFunctionData): Promise<string> {
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
@@ -33,7 +61,6 @@ export class MistralService {
       const result = await response.json();
       return result.content;
     } catch (error) {
-      console.error('Content Generation Error:', error);
       throw error;
     }
   }

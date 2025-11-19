@@ -60,7 +60,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onNavigateToDashboard })
 
       if (error) throw error;
       setApiKeys(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading API keys:', error);
     }
   };
@@ -74,7 +74,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onNavigateToDashboard })
 
       if (error) throw error;
       setUsers(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading users:', error);
     }
   };
@@ -102,8 +102,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onNavigateToDashboard })
       setNewKeyValue('');
       setShowNewKeyForm(false);
       await loadApiKeys();
-    } catch (error: any) {
-      setMessage(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setMessage(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -123,8 +124,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onNavigateToDashboard })
       setEditingKey(null);
       setKeyValue('');
       await loadApiKeys();
-    } catch (error: any) {
-      setMessage(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setMessage(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -148,8 +150,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onNavigateToDashboard })
 
       setMessage('API key deleted successfully');
       await loadApiKeys();
-    } catch (error: any) {
-      setMessage(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setMessage(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -170,8 +173,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onNavigateToDashboard })
 
       setMessage('User subscription updated successfully');
       await loadUsers();
-    } catch (error: any) {
-      setMessage(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setMessage(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

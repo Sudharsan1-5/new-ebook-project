@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { Button } from '../components/Button';
 import { BookOpen, Plus, LogOut, FileText, Download, Settings } from 'lucide-react';
 import { EBookWizard } from '../components/EBookWizard';
@@ -13,6 +14,7 @@ interface EBookProject extends EBook {
 
 export const Dashboard: React.FC<{ onNavigateToAdmin?: () => void }> = ({ onNavigateToAdmin }) => {
   const { user, signOut } = useAuth();
+  const toast = useToast();
   const [projects, setProjects] = useState<EBookProject[]>([]);
   const [showWizard, setShowWizard] = useState(false);
   const [exportingProject, setExportingProject] = useState<EBookProject | null>(null);
@@ -38,7 +40,6 @@ export const Dashboard: React.FC<{ onNavigateToAdmin?: () => void }> = ({ onNavi
       
       // If profile doesn't exist, create it
       if (!data) {
-        console.log('Profile not found, creating new profile for user:', user.id);
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
           .insert({
@@ -112,13 +113,13 @@ export const Dashboard: React.FC<{ onNavigateToAdmin?: () => void }> = ({ onNavi
 
   const handleCreateNew = () => {
     if (!userProfile) {
-      alert('Loading your profile... Please try again in a moment.');
+      toast.info('Loading your profile... Please try again in a moment.');
       loadUserProfile(); // Retry loading profile
       return;
     }
 
     if (userProfile.ebooks_created >= userProfile.ebooks_limit) {
-      alert(`You've reached your limit of ${userProfile.ebooks_limit} eBooks. Please upgrade your subscription to create more.`);
+      toast.warning(`You've reached your limit of ${userProfile.ebooks_limit} eBooks. Please upgrade your subscription to create more.`);
       return;
     }
 
@@ -169,9 +170,10 @@ export const Dashboard: React.FC<{ onNavigateToAdmin?: () => void }> = ({ onNavi
 
       await loadProjects();
       await loadUserProfile();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving ebook:', error);
-      alert('Failed to save eBook: ' + error.message);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Failed to save eBook: ' + errorMessage);
     } finally {
       setShowWizard(false);
     }

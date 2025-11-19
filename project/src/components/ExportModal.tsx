@@ -6,6 +6,7 @@ import { PDFExporter } from '../lib/export-pdf';
 import { EPUBExporter } from '../lib/export-epub';
 import { templates, getTemplateById } from '../lib/templates';
 import { EBook, Chapter } from '../types';
+import { useToast } from '../contexts/ToastContext';
 
 // Updated exportFormat type to include 'mockup'
 type ExportFormat = 'pdf' | 'epub' | 'mockup' | null;
@@ -23,6 +24,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   ebook,
   chapters
 }) => {
+  const toast = useToast();
   const [exporting, setExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>(null);
   const [includeCover, setIncludeCover] = useState(true);
@@ -33,9 +35,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     setExportFormat('pdf');
     setExportProgress('Preparing PDF export...');
 
-    // 💡 Added check for chapters content to help debug blank PDFs
+    // Validate chapters have content
     if (chapters.length === 0 || chapters.every(c => !c.content?.trim())) {
-        console.warn('PDF Export Warning: Chapters array is empty or all chapter content is blank. This will result in a blank PDF.');
+      throw new Error('No content available to export. Please generate content first.');
     }
 
     try {
@@ -72,7 +74,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       }, 1500);
     } catch (error) {
       console.error('PDF export failed:', error);
-      alert('Failed to export PDF. Please try again.');
+      toast.error('Failed to export PDF. Please try again.');
       setExporting(false);
       setExportFormat(null);
       setExportProgress('');
@@ -111,7 +113,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       }, 1500);
     } catch (error) {
       console.error('EPUB export failed:', error);
-      alert('Failed to export EPUB. Please try again.');
+      toast.error('Failed to export EPUB. Please try again.');
       setExporting(false);
       setExportFormat(null);
       setExportProgress('');
@@ -120,7 +122,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const handleExportMockup = async () => {
     if (!ebook.cover_url) {
-      alert('Mockup generation requires a cover image. Please generate a cover first.');
+      toast.warning('Mockup generation requires a cover image. Please generate a cover first.');
       return;
     }
 
@@ -246,7 +248,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       }, 1500);
     } catch (error) {
       console.error('Mockup generation failed:', error);
-      alert(`Failed to generate mockup. ${(error as Error).message}`);
+      toast.error(`Failed to generate mockup. ${(error as Error).message}`);
       setExporting(false);
       setExportFormat(null);
       setExportProgress('');

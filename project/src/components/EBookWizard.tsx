@@ -1,17 +1,17 @@
 
 import React, { useState } from 'react';
-import { ChevronRight, ChevronLeft, BookOpen, Sparkles, Palette, FileText, Download, Wand2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, BookOpen, Sparkles, Palette, FileText, Download, Wand2, LucideIcon } from 'lucide-react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { TextArea } from './TextArea';
 import { Modal } from './Modal';
-import { Chapter } from '../types';
+import { Chapter, EBook } from '../types';
 import { MistralService } from '../lib/mistral';
 import { supabase } from '../lib/supabase';
 
 interface EBookWizardProps {
   onClose: () => void;
-  onComplete: (project: any) => void;
+  onComplete: (project: EBook) => void;
 }
 
 type WizardStep = 'input' | 'titles' | 'outline' | 'content' | 'template' | 'cover' | 'export';
@@ -46,7 +46,14 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
   const [generatingCover, setGeneratingCover] = useState(false);
   const [generatedCoverUrl, setGeneratedCoverUrl] = useState<string | null>(null);
 
-  const steps: { id: WizardStep; label: string; icon: any }[] = [
+  // Helper function to safely extract error messages
+  const getErrorMessage = (error: unknown, fallback: string): string => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    return fallback;
+  };
+
+  const steps: { id: WizardStep; label: string; icon: LucideIcon }[] = [
     { id: 'input', label: 'Details', icon: BookOpen },
     { id: 'titles', label: 'Title', icon: Sparkles },
     { id: 'outline', label: 'Outline', icon: FileText },
@@ -105,8 +112,8 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
         setProgressPercent(0);
         setEstimatedTime('');
       }, 1000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to generate titles');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to generate titles'));
       console.error('Title generation error:', err);
       setProgressMessage('');
       setProgressPercent(0);
@@ -146,8 +153,8 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
         setProgressPercent(0);
         setEstimatedTime('');
       }, 1000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to generate outline');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to generate outline'));
       console.error('Outline generation error:', err);
       setProgressMessage('');
       setProgressPercent(0);
@@ -212,8 +219,8 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
         setTotalChapters(0);
         setEstimatedTime('');
       }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to generate content');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to generate content'));
       console.error('Content generation error:', err);
       setProgressMessage('');
       setProgressPercent(0);
@@ -252,9 +259,6 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
       }
       const functionUrl = `${supabaseUrl}/functions/v1/generate-cover`;
 
-      console.log('Calling Edge Function:', functionUrl);
-      console.log('Request payload:', { theme, mood: tone, style: coverStyle, aspectRatio: '2:3' });
-
       // Call the Edge Function directly with fetch for better control
       const response = await fetch(functionUrl, {
         method: 'POST',
@@ -270,29 +274,20 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
         })
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Edge Function error response:', errorText);
-        
+
         // Try to parse as JSON for better error message
         try {
           const errorJson = JSON.parse(errorText);
-          throw new Error(errorJson.error || errorText);
+          throw new Error(errorJson.error || 'Cover generation failed');
         } catch {
-          throw new Error(`Server error (${response.status}): ${errorText}`);
+          throw new Error(`Server error (${response.status})`);
         }
       }
 
-      // Check content type
-      const contentType = response.headers.get('content-type');
-      console.log('Response content-type:', contentType);
-
       // Get the image blob
       const imageBlob = await response.blob();
-      console.log('Received blob size:', imageBlob.size, 'bytes');
 
       // Verify the blob has content
       if (imageBlob.size === 0) {
@@ -304,7 +299,6 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
 
       setProgressPercent(100);
       setProgressMessage('Cover generated successfully!');
-      console.log('Cover generated successfully!');
 
       // Clear progress after delay
       setTimeout(() => {
@@ -312,18 +306,19 @@ export const EBookWizard: React.FC<EBookWizardProps> = ({ onClose, onComplete })
         setProgressPercent(0);
         setEstimatedTime('');
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Cover generation error:', err);
       let errorMessage = 'Failed to generate cover.';
 
-      if (err.message?.includes('Stability AI API key not configured')) {
+      const errMsg = getErrorMessage(err, '');
+      if (errMsg.includes('Stability AI API key not configured')) {
         errorMessage = 'Stability AI API key not configured. Please contact administrator.';
-      } else if (err.message?.includes('Unauthorized') || err.message?.includes('Not authenticated')) {
+      } else if (errMsg.includes('Unauthorized') || errMsg.includes('Not authenticated')) {
         errorMessage = 'Authentication failed. Please log in again.';
-      } else if (err.message?.includes('Stability AI error')) {
+      } else if (errMsg.includes('Stability AI error')) {
         errorMessage = 'Stability AI service error. Please check your API key and credits.';
-      } else if (err.message) {
-        errorMessage = err.message;
+      } else if (errMsg) {
+        errorMessage = errMsg;
       }
 
       setError(errorMessage);

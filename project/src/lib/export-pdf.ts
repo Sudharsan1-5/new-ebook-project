@@ -9,24 +9,16 @@ export class PDFExporter {
     includeCover: boolean = false,
     coverImageUrl?: string
   ): Promise<Blob> {
-    console.log('Starting PDF export...');
-    console.log('eBook:', ebook.title);
-    console.log('Chapters:', chapters.length);
-    console.log('Include cover:', includeCover);
-    console.log('Cover URL:', coverImageUrl);
-    
     // Validate chapters have content
     if (!chapters || chapters.length === 0) {
       throw new Error('No chapters to export');
     }
-    
+
     const hasContent = chapters.some(ch => ch.content && ch.content.trim().length > 0);
     if (!hasContent) {
       throw new Error('Chapters have no content');
     }
-    
-    console.log('Chapters validated, generating HTML...');
-    
+
     // Create a container div for the content
     const container = document.createElement('div');
     container.className = 'pdf-export-container';
@@ -42,24 +34,20 @@ export class PDFExporter {
     container.style.opacity = '0.01'; // Slightly visible for rendering
     container.style.pointerEvents = 'none';
     container.style.overflow = 'visible';
-    
+
     // Generate the content
     const styles = this.generateInlineStyles(template);
     const content = await this.generateContent(ebook, chapters, includeCover, coverImageUrl);
-    
-    console.log('Content generated, length:', content.length);
-    
+
     // Create a style element
     const styleElement = document.createElement('style');
     styleElement.textContent = styles;
-    
+
     // Set the content
     container.innerHTML = content;
     container.insertBefore(styleElement, container.firstChild);
-    
+
     document.body.appendChild(container);
-    
-    console.log('Container added to DOM');
 
     try {
       const opt = {
@@ -89,12 +77,10 @@ export class PDFExporter {
       } as any;
 
       // Wait for fonts to load
-      console.log('Waiting for fonts...');
       await document.fonts.ready;
-      
+
       // Wait for images to load if cover is included
       if (includeCover && coverImageUrl) {
-        console.log('Waiting for cover image to load...');
         const images = container.getElementsByTagName('img');
         await Promise.all(
           Array.from(images).map(img => {
@@ -102,28 +88,23 @@ export class PDFExporter {
             return new Promise<void>((resolve) => {
               img.onload = () => resolve();
               img.onerror = () => {
-                console.warn('Image failed to load:', img.src);
-                resolve(); // Continue anyway
+                // Image failed to load, continue anyway
+                resolve();
               };
               setTimeout(() => resolve(), 5000); // Timeout after 5s
             });
           })
         );
       }
-      
-      // Longer delay to ensure rendering is complete
-      console.log('Waiting for rendering...');
+
+      // Delay to ensure rendering is complete
       await new Promise(resolve => setTimeout(resolve, 500));
-      
-      console.log('Generating PDF...');
 
       // Generate PDF and return as blob
       const pdfBlob = await html2pdf()
         .set(opt)
         .from(container)
         .output('blob');
-      
-      console.log('PDF generated, size:', pdfBlob.size, 'bytes');
 
       return pdfBlob;
     } finally {
@@ -493,16 +474,11 @@ export class PDFExporter {
 
   private formatContent(content: string): string {
     if (!content || content.trim() === '') {
-      console.warn('Empty content detected');
       return '<p class="no-content">No content available.</p>';
     }
 
-    console.log('Formatting content, length:', content.length);
-
     // Split by double newlines for paragraphs
     const paragraphs = content.split('\n\n').filter(p => p.trim());
-
-    console.log('Paragraphs found:', paragraphs.length);
 
     const formatted = paragraphs.map((paragraph) => {
       const trimmed = paragraph.trim();
@@ -551,7 +527,6 @@ export class PDFExporter {
       return `<p>${formattedText}</p>`;
     }).join('\n');
 
-    console.log('Content formatted successfully');
     return formatted;
   }
 
